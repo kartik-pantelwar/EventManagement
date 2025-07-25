@@ -31,15 +31,16 @@ type CreateEventRequest struct {
 
 // EventResponse represents the response for customers viewing events
 type EventResponse struct {
-	EventID     int       `json:"id"`
-	EventName   string    `json:"name"`
-	OrganizerID int       `json:"organizer"`
-	Place       string    `json:"place"`
-	EventDate   time.Time `json:"date"`
-	StartTime   string    `json:"start_time"`
-	EndTime     string    `json:"end_time"`
-	Capacity    int       `json:"capacity"`
-	SeatsLeft   int       `json:"seats_left"`
+	EventID       int       `json:"id"`
+	EventName     string    `json:"name"`
+	OrganizerID   int       `json:"organizer"`
+	OrganizerName string    `json:"organizer_name"`
+	Place         string    `json:"place"`
+	EventDate     time.Time `json:"date"`
+	StartTime     string    `json:"start_time"`
+	EndTime       string    `json:"end_time"`
+	Capacity      int       `json:"capacity"`
+	SeatsLeft     int       `json:"seats_left"`
 }
 
 // EventFilters represents filters for event listing
