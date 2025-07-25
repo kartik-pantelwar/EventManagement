@@ -4,18 +4,19 @@ import "time"
 
 // Event represents an event in the system
 type Event struct {
-	EventID     int       `json:"event_id"`
-	EventName   string    `json:"event_name"`
-	OrganizerID int       `json:"organizer_id"`
-	Place       string    `json:"place"`
-	EventDate   time.Time `json:"event_date"`
-	StartTime   string    `json:"start_time"`
-	EndTime     string    `json:"end_time"`
-	Capacity    int       `json:"capacity"`
-	Filled      int       `json:"filled"`
-	SeatsLeft   int       `json:"seats_left"` // Calculated field: capacity - filled
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	EventID      int       `json:"event_id"`
+	EventName    string    `json:"event_name"`
+	OrganizerID  int       `json:"organizer_id"`
+	Place        string    `json:"place"`
+	EventDate    time.Time `json:"-"`          // Internal use only
+	EventDateStr string    `json:"event_date"` // For JSON output: YYYY-MM-DD
+	StartTime    string    `json:"start_time"` // Format: HH:MM
+	EndTime      string    `json:"end_time"`   // Format: HH:MM
+	Capacity     int       `json:"capacity"`
+	Filled       int       `json:"filled"`
+	SeatsLeft    int       `json:"seats_left"` // Calculated field: capacity - filled
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // CreateEventRequest represents the request to create an event
@@ -31,16 +32,16 @@ type CreateEventRequest struct {
 
 // EventResponse represents the response for customers viewing events
 type EventResponse struct {
-	EventID       int       `json:"id"`
-	EventName     string    `json:"name"`
-	OrganizerID   int       `json:"organizer"`
-	OrganizerName string    `json:"organizer_name"`
-	Place         string    `json:"place"`
-	EventDate     time.Time `json:"date"`
-	StartTime     string    `json:"start_time"`
-	EndTime       string    `json:"end_time"`
-	Capacity      int       `json:"capacity"`
-	SeatsLeft     int       `json:"seats_left"`
+	EventID       int    `json:"id"`
+	EventName     string `json:"name"`
+	OrganizerID   int    `json:"organizer"`
+	OrganizerName string `json:"organizer_name"`
+	Place         string `json:"place"`
+	EventDate     string `json:"date"`       // Format: YYYY-MM-DD
+	StartTime     string `json:"start_time"` // Format: HH:MM
+	EndTime       string `json:"end_time"`   // Format: HH:MM
+	Capacity      int    `json:"capacity"`
+	SeatsLeft     int    `json:"seats_left"`
 }
 
 // EventFilters represents filters for event listing
@@ -85,7 +86,7 @@ type EventRepository interface {
 	CreateEvent(event *Event) (*Event, error)
 	GetEventByID(eventID int) (*Event, error)
 	GetAllEventsForCustomers(filters *EventFilters) ([]EventResponse, error)
-	JoinEvent(customerID int, eventID int, customerEmail, customerUsername string) error
+	JoinEvent(customerID int, eventID int) error
 	LeaveEvent(customerID int, eventID int) error
 	GetEventCustomers(eventID, organizerID int) ([]CustomerBooking, error)
 	GetOrganizerEvents(organizerID int) ([]Event, error)

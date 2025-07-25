@@ -5,6 +5,7 @@ import (
 	"eventservice/src/internal/core"
 	eventservice "eventservice/src/internal/usecase/event"
 	"eventservice/src/pkg/response"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -176,29 +177,41 @@ func (eh *EventHandler) DeleteEvent(w http.ResponseWriter, r *http.Request) {
 
 // JoinEvent handles POST /events/{id}/join
 func (eh *EventHandler) JoinEvent(w http.ResponseWriter, r *http.Request) {
+	log.Printf("DEBUG: JoinEvent handler called for path: %s", r.URL.Path)
+
 	// Get user ID from context (set by auth middleware)
 	userID, ok := r.Context().Value("userID").(int)
 	if !ok {
+		log.Printf("DEBUG: No userID found in context")
 		response.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
+	log.Printf("DEBUG: UserID from context: %d", userID)
+
 	eventIDStr := chi.URLParam(r, "id")
 	eventID, err := strconv.Atoi(eventIDStr)
 	if err != nil {
+		log.Printf("DEBUG: Invalid event ID: %s", eventIDStr)
 		response.WriteError(w, http.StatusBadRequest, "Invalid event ID")
 		return
 	}
 
+	log.Printf("DEBUG: Event ID: %d", eventID)
+
 	// For now, use placeholder values for email and username
 	// In production, these should come from the auth service via gRPC
 	request := &core.JoinEventRequest{EventID: eventID}
+	log.Printf("DEBUG: Calling eventService.JoinEventWithRequest")
+
 	bookingResponse, err := eh.eventService.JoinEventWithRequest(userID, request)
 	if err != nil {
+		log.Printf("DEBUG: JoinEventWithRequest failed: %v", err)
 		response.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
+	log.Printf("DEBUG: JoinEventWithRequest successful: %+v", bookingResponse)
 	response.WriteSuccess(w, http.StatusOK, "Successfully joined event", bookingResponse)
 }
 

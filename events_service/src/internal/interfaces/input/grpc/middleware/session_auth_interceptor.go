@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"eventservice/src/pkg/response"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -19,23 +20,55 @@ func NewSessionAuthMiddleware(grpcClient pb.ValidationServiceClient) *SessionAut
 	}
 }
 
-// SessionIDMiddleware extracts session_id from the request header and validates it via gRPC
+// SessionIDMiddleware extracts session_id from the request cookie and validates it via gRPC
 func (m *SessionAuthMiddleware) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sessionID := r.Header.Get("Session-Id")
+		log.Printf("DEBUG: Processing request to %s", r.URL.Path)
+
+		// Try to get session ID from cookie first (preferred method)
+		sessionID := ""
+		if cookie, err := r.Cookie("sess"); err == nil {
+			sessionID = cookie.Value
+			log.Printf("DEBUG: Found session ID in cookie: %s", sessionID)
+		} else {
+			log.Printf("DEBUG: No 'sess' cookie found: %v", err)
+		}
+
+		// Fallback to header if cookie not found (for backward compatibility)
 		if sessionID == "" {
+			sessionID = r.Header.Get("Session-Id")
+			if sessionID != "" {
+				log.Printf("DEBUG: Found session ID in header: %s", sessionID)
+			} else {
+				log.Printf("DEBUG: No 'Session-Id' header found")
+			}
+		}
+
+		if sessionID == "" {
+			log.Printf("DEBUG: No session ID found in cookies or headers")
 			response.WriteError(w, http.StatusUnauthorized, "Missing session ID")
 			return
 		}
+
+		log.Printf("DEBUG: Making gRPC call to validate session: %s", sessionID)
 
 		// gRPC call to auth service
 		resp, err := m.GrpcClient.ValidateSession(context.Background(), &pb.ValidateSessionRequest{
 			SessionId: sessionID,
 		})
-		if err != nil || !resp.Valid {
+		if err != nil {
+			log.Printf("DEBUG: gRPC call failed: %v", err)
 			response.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
+
+		if !resp.Valid {
+			log.Printf("DEBUG: Session validation failed: %s", resp.Error)
+			response.WriteError(w, http.StatusUnauthorized, "Unauthorized")
+			return
+		}
+
+		log.Printf("DEBUG: Session validated successfully for user: %s, role: %s", resp.UserId, resp.Role)
 
 		// Convert user_id from string to int
 		userID, err := strconv.Atoi(resp.UserId)

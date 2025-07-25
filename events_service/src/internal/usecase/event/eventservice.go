@@ -65,8 +65,8 @@ func (s *Service) CreateEvent(req *core.CreateEventRequest, organizerID int) (*c
 }
 
 // JoinEvent allows a customer to join an event
-func (s *Service) JoinEvent(customerID int, eventID int, customerEmail, customerUsername string) error {
-	return s.repo.JoinEvent(customerID, eventID, customerEmail, customerUsername)
+func (s *Service) JoinEvent(customerID int, eventID int) error {
+	return s.repo.JoinEvent(customerID, eventID)
 }
 
 // GetAllEventsForCustomers gets all available events for customers with filters
@@ -113,7 +113,7 @@ func (s *Service) DeleteEvent(eventID int, organizerID int) error {
 func (s *Service) JoinEventWithRequest(userID int, request *core.JoinEventRequest) (*core.JoinEventResponse, error) {
 	// For this implementation, we need to get user details from context or make them optional
 	// Since we don't have access to email/username here, we'll use placeholder values
-	err := s.repo.JoinEvent(userID, request.EventID, "", "") // Empty email/username for now
+	err := s.repo.JoinEvent(userID, request.EventID)
 	if err != nil {
 		return nil, err
 	}

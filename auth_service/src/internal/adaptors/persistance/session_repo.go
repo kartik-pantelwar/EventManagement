@@ -55,19 +55,12 @@ func (u *SessionRepo) DeleteSession(uid int) error {
 func (u *SessionRepo) GetUserRole(userID int) (string, error) {
 	var role string
 
-	// First check if user is an organizer
-	query := "SELECT 'organizer' FROM organizers WHERE uid = $1"
+	// Get the user's profile from the users table
+	query := "SELECT profile FROM users WHERE cid = $1"
 	err := u.db.db.QueryRow(query, userID).Scan(&role)
-	if err == nil {
-		return role, nil
+	if err != nil {
+		return "", fmt.Errorf("user not found: %v", err)
 	}
 
-	// Then check if user is a customer
-	query = "SELECT 'customer' FROM customers WHERE uid = $1"
-	err = u.db.db.QueryRow(query, userID).Scan(&role)
-	if err == nil {
-		return role, nil
-	}
-
-	return "", fmt.Errorf("user role not found")
+	return role, nil
 }

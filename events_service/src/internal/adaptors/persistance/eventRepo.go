@@ -34,27 +34,27 @@ func (er *EventRepo) CreateEvent(event *core.Event) (*core.Event, error) {
 	query := `
 		INSERT INTO events_schema.events (event_name, organizer_id, place, event_date, start_time, end_time, capacity)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING event_id, created_at, updated_at`
+		RETURNING event_id, event_name, organizer_id, place, event_date, start_time, end_time, capacity, filled, created_at, updated_at`
 
 	var createdEvent core.Event
+	var startTime, endTime time.Time // Scan TIME fields as time.Time
 	err = er.db.db.QueryRow(query, event.EventName, event.OrganizerID,
 		event.Place, event.EventDate, event.StartTime, event.EndTime, event.Capacity).
-		Scan(&createdEvent.EventID, &createdEvent.CreatedAt, &createdEvent.UpdatedAt)
+		Scan(&createdEvent.EventID, &createdEvent.EventName, &createdEvent.OrganizerID,
+			&createdEvent.Place, &createdEvent.EventDate, &startTime,
+			&endTime, &createdEvent.Capacity, &createdEvent.Filled,
+			&createdEvent.CreatedAt, &createdEvent.UpdatedAt)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create event: %v", err)
 	}
 
-	// Copy the input data to the created event
-	createdEvent.EventName = event.EventName
-	createdEvent.OrganizerID = event.OrganizerID
-	createdEvent.Place = event.Place
-	createdEvent.EventDate = event.EventDate
-	createdEvent.StartTime = event.StartTime
-	createdEvent.EndTime = event.EndTime
-	createdEvent.Capacity = event.Capacity
-	createdEvent.Filled = 0
-	createdEvent.SeatsLeft = event.Capacity
+	// Format the date and times for JSON response
+	createdEvent.EventDateStr = createdEvent.EventDate.Format("2006-01-02")
+	createdEvent.StartTime = startTime.Format("15:04")
+	createdEvent.EndTime = endTime.Format("15:04")
+	// Calculate seats left
+	createdEvent.SeatsLeft = createdEvent.Capacity - createdEvent.Filled
 
 	return &createdEvent, nil
 }
@@ -112,14 +112,22 @@ func (er *EventRepo) GetAllEventsForCustomers(filters *core.EventFilters) ([]cor
 		var event core.EventResponse
 		var filled int
 		var createdAt, updatedAt time.Time
+		var eventDate time.Time          // Scan as time.Time first, then format
+		var startTime, endTime time.Time // Scan as time.Time first, then format
+
 		err := rows.Scan(
 			&event.EventID, &event.EventName, &event.OrganizerID, &event.Place,
-			&event.EventDate, &event.StartTime, &event.EndTime, &event.Capacity,
+			&eventDate, &startTime, &endTime, &event.Capacity,
 			&filled, &createdAt, &updatedAt, &event.OrganizerName,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan event: %v", err)
 		}
+
+		// Format the date and times
+		event.EventDate = eventDate.Format("2006-01-02")
+		event.StartTime = startTime.Format("15:04")
+		event.EndTime = endTime.Format("15:04")
 		event.SeatsLeft = event.Capacity - filled
 		events = append(events, event)
 	}
@@ -128,10 +136,10 @@ func (er *EventRepo) GetAllEventsForCustomers(filters *core.EventFilters) ([]cor
 }
 
 // JoinEvent allows a customer to join an event by event ID
-func (er *EventRepo) JoinEvent(customerID int, eventID int, customerEmail, customerUsername string) error {
+func (er *EventRepo) JoinEvent(customerID int, eventID int) error {
 	// First get event details
 	var eventDate time.Time
-	var startTime, endTime string
+	var startTime, endTime time.Time
 	var capacity, filled int
 
 	eventQuery := `SELECT event_date, start_time, end_time, capacity, filled FROM events_schema.events WHERE event_id = $1`
@@ -160,12 +168,23 @@ func (er *EventRepo) JoinEvent(customerID int, eventID int, customerEmail, custo
 		return fmt.Errorf("you already have an event during this time period")
 	}
 
-	// Join the event (we no longer need cemail and cusername since we can get them from users table)
-	insertQuery := `
-		INSERT INTO events_schema.userbooked_events (event_id, cid)
-		VALUES ($1, $2)`
+	// Fetch customer details from users table
+	var customerEmail, customerUsername string
+	userQuery := `SELECT email, username FROM users WHERE cid = $1`
+	err = er.db.db.QueryRow(userQuery, customerID).Scan(&customerEmail, &customerUsername)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("customer not found")
+		}
+		return fmt.Errorf("failed to get customer details: %v", err)
+	}
 
-	_, err = er.db.db.Exec(insertQuery, eventID, customerID)
+	// Join the event with customer details
+	insertQuery := `
+		INSERT INTO events_schema.userbooked_events (event_id, cid, cemail, cusername)
+		VALUES ($1, $2, $3, $4)`
+
+	_, err = er.db.db.Exec(insertQuery, eventID, customerID, customerEmail, customerUsername)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") {
 			return fmt.Errorf("you have already joined this event")
@@ -236,14 +255,19 @@ func (er *EventRepo) GetOrganizerEvents(organizerID int) ([]core.Event, error) {
 	var events []core.Event
 	for rows.Next() {
 		var event core.Event
+		var startTime, endTime time.Time // Scan TIME fields as time.Time
 		err := rows.Scan(
 			&event.EventID, &event.EventName, &event.OrganizerID,
-			&event.Place, &event.EventDate, &event.StartTime, &event.EndTime,
+			&event.Place, &event.EventDate, &startTime, &endTime,
 			&event.Capacity, &event.Filled, &event.CreatedAt, &event.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan event: %v", err)
 		}
+		// Format the date and times for JSON response
+		event.EventDateStr = event.EventDate.Format("2006-01-02")
+		event.StartTime = startTime.Format("15:04")
+		event.EndTime = endTime.Format("15:04")
 		event.SeatsLeft = event.Capacity - event.Filled
 		events = append(events, event)
 	}
@@ -259,9 +283,10 @@ func (er *EventRepo) GetEventByID(eventID int) (*core.Event, error) {
 		FROM events_schema.events WHERE event_id = $1`
 
 	var event core.Event
+	var startTime, endTime time.Time // Scan TIME fields as time.Time
 	err := er.db.db.QueryRow(query, eventID).Scan(
 		&event.EventID, &event.EventName, &event.OrganizerID,
-		&event.Place, &event.EventDate, &event.StartTime, &event.EndTime,
+		&event.Place, &event.EventDate, &startTime, &endTime,
 		&event.Capacity, &event.Filled, &event.CreatedAt, &event.UpdatedAt,
 	)
 	if err != nil {
@@ -271,6 +296,10 @@ func (er *EventRepo) GetEventByID(eventID int) (*core.Event, error) {
 		return nil, fmt.Errorf("failed to get event: %v", err)
 	}
 
+	// Format the date and times for JSON response
+	event.EventDateStr = event.EventDate.Format("2006-01-02")
+	event.StartTime = startTime.Format("15:04")
+	event.EndTime = endTime.Format("15:04")
 	event.SeatsLeft = event.Capacity - event.Filled
 	return &event, nil
 }
@@ -318,14 +347,19 @@ func (er *EventRepo) GetUserBookings(userID int) ([]core.Event, error) {
 	var events []core.Event
 	for rows.Next() {
 		var event core.Event
+		var startTime, endTime time.Time // Scan TIME fields as time.Time
 		err := rows.Scan(
 			&event.EventID, &event.EventName, &event.OrganizerID,
-			&event.Place, &event.EventDate, &event.StartTime, &event.EndTime,
+			&event.Place, &event.EventDate, &startTime, &endTime,
 			&event.Capacity, &event.Filled, &event.CreatedAt, &event.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan event: %v", err)
 		}
+		// Format the date and times for JSON response
+		event.EventDateStr = event.EventDate.Format("2006-01-02")
+		event.StartTime = startTime.Format("15:04")
+		event.EndTime = endTime.Format("15:04")
 		event.SeatsLeft = event.Capacity - event.Filled
 		events = append(events, event)
 	}

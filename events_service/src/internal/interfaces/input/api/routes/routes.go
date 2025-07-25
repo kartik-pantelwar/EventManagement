@@ -18,15 +18,17 @@ func InitRoutes(eventHandler *event.EventHandler, grpcClient pb.ValidationServic
 
 	// API routes
 	router.Route("/api/v1", func(r chi.Router) {
+
 		// Public events routes
 		r.Route("/events", func(r chi.Router) {
 			r.Get("/", eventHandler.GetAllEvents) // Get all events with filters
+			// ^Filter not working properly
 			r.Get("/{id}", eventHandler.GetEvent) // Get specific event
 
 			// Protected event routes (authentication required)
 			r.Group(func(r chi.Router) {
 				r.Use(sessionAuth.Middleware) // Apply session validation
-				// Customer routes 
+				// Customer routes
 				r.With(sessionAuth.CustomerOnly).Post("/{id}/join", eventHandler.JoinEvent)
 				r.With(sessionAuth.CustomerOnly).Delete("/{id}/leave", eventHandler.LeaveEvent)
 			})
@@ -36,7 +38,7 @@ func InitRoutes(eventHandler *event.EventHandler, grpcClient pb.ValidationServic
 		r.Group(func(r chi.Router) {
 			r.Use(sessionAuth.Middleware)
 
-			// Customerroutes
+			// Customer Routes
 			r.Route("/user", func(r chi.Router) {
 				r.Use(sessionAuth.CustomerOnly)
 				r.Get("/bookings", eventHandler.GetMyBookings) // Get user's booked events
